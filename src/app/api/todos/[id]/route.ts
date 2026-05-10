@@ -5,7 +5,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
+  const supabase = createClient();
   const { id } = await params;
   const body = await request.json();
 
@@ -24,7 +24,7 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
+  const supabase = createClient();
   const { id } = await params;
 
   const { error } = await supabase.from("todos").delete().eq("id", id);

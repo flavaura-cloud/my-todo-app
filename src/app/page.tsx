@@ -1,29 +1,27 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type SubmitEvent } from "react";
 import type { Todo } from "@/types/todo";
 
 export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     fetch("/api/todos")
       .then((r) => r.json())
-      .then(setTodos);
+      .then((data) => setTodos(Array.isArray(data) ? data : []));
   }, []);
 
-  async function addTodo(e: React.FormEvent<HTMLFormElement>) {
+  async function addTodo(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!input.trim()) return;
 
     const res = await fetch("/api/todos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: input }),
+      body: JSON.stringify({ title: input.trim() }),
     });
     if (!res.ok) return;
     const newTodo: Todo = await res.json();
@@ -36,30 +34,12 @@ export default function Home() {
       const res = await fetch(`/api/todos/${todo.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed: !todo.completed }),
+        body: JSON.stringify({ is_completed: !todo.is_completed }),
       });
       if (!res.ok) return;
       const updated: Todo = await res.json();
       setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
     });
-  }
-
-  function startEdit(todo: Todo) {
-    setEditingId(todo.id);
-    setEditingTitle(todo.title);
-  }
-
-  async function saveEdit(id: string) {
-    if (!editingTitle.trim()) return;
-    const res = await fetch(`/api/todos/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: editingTitle.trim() }),
-    });
-    if (!res.ok) return;
-    const updated: Todo = await res.json();
-    setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-    setEditingId(null);
   }
 
   async function deleteTodo(id: string) {
@@ -68,109 +48,73 @@ export default function Home() {
     setTodos((prev) => prev.filter((t) => t.id !== id));
   }
 
-  const remaining = todos.filter((t) => !t.completed).length;
+  const completedCount = todos.filter((t) => t.is_completed).length;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-start justify-center pt-16 px-4">
-      <div className="w-full max-w-lg">
-        <h1 className="text-4xl font-bold text-center text-indigo-700 mb-2">
-          My Todo App
-        </h1>
-        <p className="text-center text-gray-500 mb-8 text-sm">
-          {todos.length === 0
-            ? "할 일을 추가해보세요"
-            : `${remaining}개 남음 / 총 ${todos.length}개`}
-        </p>
+    <main className="min-h-screen bg-gray-50 flex items-start justify-center pt-20 px-4">
+      <div className="w-full max-w-md">
 
-        {/* 추가 폼 */}
+        {/* 헤더 */}
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-bold text-gray-900">나의 할 일</h1>
+          {todos.length > 0 && (
+            <p className="mt-1 text-sm text-gray-400">
+              {completedCount}/{todos.length} 완료
+            </p>
+          )}
+        </div>
+
+        {/* 입력 폼 */}
         <form onSubmit={addTodo} className="flex gap-2 mb-6">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="새 할 일을 입력하세요..."
-            className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400"
+            placeholder="할 일을 입력하세요"
+            className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-300"
           />
           <button
             type="submit"
             disabled={!input.trim()}
-            className="rounded-xl bg-indigo-600 px-5 py-3 text-white font-semibold shadow-sm hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             추가
           </button>
         </form>
 
-        {/* 목록 */}
-        <ul className="space-y-2">
-          {todos.map((todo) => (
-            <li
-              key={todo.id}
-              className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm border border-gray-100"
-            >
-              {/* 완료 체크박스 */}
-              <button
-                onClick={() => toggleComplete(todo)}
-                disabled={isPending}
-                className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-                  todo.completed
-                    ? "bg-indigo-600 border-indigo-600"
-                    : "border-gray-300 hover:border-indigo-400"
-                }`}
+        {/* 할 일 목록 */}
+        {todos.length > 0 ? (
+          <ul className="space-y-2">
+            {todos.map((todo) => (
+              <li
+                key={todo.id}
+                className="flex items-center gap-3 rounded-lg bg-white border border-gray-100 px-4 py-3 shadow-sm"
               >
-                {todo.completed && (
-                  <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
-                    <path
-                      d="M2 6l3 3 5-5"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </button>
-
-              {/* 제목 / 편집 */}
-              {editingId === todo.id ? (
+                {/* 체크박스 */}
                 <input
-                  autoFocus
-                  value={editingTitle}
-                  onChange={(e) => setEditingTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") saveEdit(todo.id);
-                    if (e.key === "Escape") setEditingId(null);
-                  }}
-                  onBlur={() => saveEdit(todo.id)}
-                  className="flex-1 rounded-lg border border-indigo-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  type="checkbox"
+                  checked={todo.is_completed}
+                  onChange={() => toggleComplete(todo)}
+                  disabled={isPending}
+                  className="w-4 h-4 rounded accent-blue-500 cursor-pointer flex-shrink-0"
                 />
-              ) : (
+
+                {/* 제목 */}
                 <span
-                  onDoubleClick={() => startEdit(todo)}
-                  className={`flex-1 text-sm cursor-pointer ${
-                    todo.completed ? "line-through text-gray-400" : "text-gray-800"
+                  className={`flex-1 text-sm ${
+                    todo.is_completed
+                      ? "line-through text-gray-300"
+                      : "text-gray-700"
                   }`}
                 >
                   {todo.title}
                 </span>
-              )}
 
-              {/* 편집 / 삭제 버튼 */}
-              <div className="flex gap-1 flex-shrink-0">
-                {editingId !== todo.id && (
-                  <button
-                    onClick={() => startEdit(todo)}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                    title="편집"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                    </svg>
-                  </button>
-                )}
+                {/* 삭제 버튼 */}
                 <button
                   onClick={() => deleteTodo(todo.id)}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                  title="삭제"
+                  className="flex-shrink-0 text-gray-300 hover:text-red-400 transition-colors"
+                  aria-label="삭제"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
                     <path
@@ -180,29 +124,28 @@ export default function Home() {
                     />
                   </svg>
                 </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        {todos.length === 0 && (
-          <div className="text-center text-gray-400 mt-12">
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="text-center py-16 text-gray-300">
             <svg
-              className="w-12 h-12 mx-auto mb-3 opacity-40"
+              className="w-10 h-10 mx-auto mb-3"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
+              strokeWidth={1.5}
             >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={1.5}
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
               />
             </svg>
-            <p>할 일이 없습니다</p>
+            <p className="text-sm">할 일이 없습니다</p>
           </div>
         )}
+
       </div>
     </main>
   );
