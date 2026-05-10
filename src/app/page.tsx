@@ -6,27 +6,48 @@ import type { Todo } from "@/types/todo";
 export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     fetch("/api/todos")
       .then((r) => r.json())
-      .then((data) => setTodos(Array.isArray(data) ? data : []));
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setTodos(data);
+        } else {
+          setError("목록을 불러오지 못했습니다: " + (data?.error ?? "알 수 없는 오류"));
+        }
+      })
+      .catch(() => setError("서버에 연결할 수 없습니다."));
   }, []);
 
   async function addTodo(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!input.trim()) return;
 
-    const res = await fetch("/api/todos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: input.trim() }),
-    });
-    if (!res.ok) return;
-    const newTodo: Todo = await res.json();
-    setTodos((prev) => [newTodo, ...prev]);
-    setInput("");
+    setIsAdding(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: input.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError("추가 실패: " + (data?.error ?? res.status));
+        return;
+      }
+      setTodos((prev) => [data, ...prev]);
+      setInput("");
+    } catch {
+      setError("서버에 연결할 수 없습니다.");
+    } finally {
+      setIsAdding(false);
+    }
   }
 
   function toggleComplete(todo: Todo) {
@@ -64,6 +85,14 @@ export default function Home() {
           )}
         </div>
 
+        {/* 에러 메시지 */}
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button>
+          </div>
+        )}
+
         {/* 입력 폼 */}
         <form onSubmit={addTodo} className="flex gap-2 mb-6">
           <input
@@ -71,14 +100,15 @@ export default function Home() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="할 일을 입력하세요"
-            className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-300"
+            disabled={isAdding}
+            className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-300 disabled:opacity-50"
           />
           <button
             type="submit"
-            disabled={!input.trim()}
-            className="rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            disabled={!input.trim() || isAdding}
+            className="rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-w-[60px]"
           >
-            추가
+            {isAdding ? "..." : "추가"}
           </button>
         </form>
 
@@ -90,7 +120,6 @@ export default function Home() {
                 key={todo.id}
                 className="flex items-center gap-3 rounded-lg bg-white border border-gray-100 px-4 py-3 shadow-sm"
               >
-                {/* 체크박스 */}
                 <input
                   type="checkbox"
                   checked={todo.is_completed}
@@ -98,19 +127,13 @@ export default function Home() {
                   disabled={isPending}
                   className="w-4 h-4 rounded accent-blue-500 cursor-pointer flex-shrink-0"
                 />
-
-                {/* 제목 */}
                 <span
                   className={`flex-1 text-sm ${
-                    todo.is_completed
-                      ? "line-through text-gray-300"
-                      : "text-gray-700"
+                    todo.is_completed ? "line-through text-gray-300" : "text-gray-700"
                   }`}
                 >
                   {todo.title}
                 </span>
-
-                {/* 삭제 버튼 */}
                 <button
                   onClick={() => deleteTodo(todo.id)}
                   className="flex-shrink-0 text-gray-300 hover:text-red-400 transition-colors"
@@ -129,18 +152,8 @@ export default function Home() {
           </ul>
         ) : (
           <div className="text-center py-16 text-gray-300">
-            <svg
-              className="w-10 h-10 mx-auto mb-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-              />
+            <svg className="w-10 h-10 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
             <p className="text-sm">할 일이 없습니다</p>
           </div>
